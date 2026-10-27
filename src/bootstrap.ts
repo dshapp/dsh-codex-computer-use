@@ -10,6 +10,8 @@ import { pipeline } from 'node:stream/promises'
 import { Readable, Transform } from 'node:stream'
 import { inflateRawSync } from 'node:zlib'
 import { setTimeout as delay } from 'node:timers/promises'
+import { downloadMinimalZip, type RangeManifest } from './range-runtime.ts'
+import { matchingManifest, prepareMinimal, readMinimal } from './minimal-bootstrap.ts'
 
 export interface RuntimePaths { root: string; releaseDir: string; nodePath: string; cliPath: string; appPath: string; codexHome: string; clientPath: string; provenance?: { kind: 'local'; sourceApp: string } }
 /** Default prefers a verified installed cohort. skipLocal bypasses all local paths/markers; force refreshes the official managed runtime (archivePath, if supplied, is still verified). */
@@ -133,12 +135,14 @@ async function download(s: RuntimeSource, file: string, signal?: AbortSignal, lo
   if (bytes !== s.bytes || hash.digest('hex') !== s.sha256) throw Error('Official runtime ZIP SHA256/size mismatch')
 }
 interface Dependencies {
+  manifest?: () => RangeManifest | undefined; downloadMinimalZip: typeof downloadMinimalZip;
   localCandidates: () => string[]; localHomes: () => string[];
   platform: string; arch: string; download: typeof download; inspectZip: typeof inspectRuntimeZip; verifySigned: typeof verifySigned; appVersion: typeof appVersion; availableBytes: typeof availableBytes;
   copy: (source: string, destination: string, signal?: AbortSignal) => Promise<void>; unpack: (archive: string, destination: string, signal?: AbortSignal) => Promise<void>; lockWaitMs: number; lockPollMs: number
   lockFs?: Pick<typeof fs, 'mkdir' | 'writeFile' | 'rename' | 'rm'> // Internal test seam for deterministic lock/guard races.
 }
-const defaultDeps: Dependencies = { localCandidates: () => ['/Applications/ChatGPT.app', '/Applications/Codex.app', join(homedir(), 'Applications/ChatGPT.app'), join(homedir(), 'Applications/Codex.app')], localHomes: () => [...new Set([...(process.env.CODEX_HOME && isAbsolute(process.env.CODEX_HOME) ? [resolve(process.env.CODEX_HOME)] : []), join(homedir(), '.codex')])], platform: process.platform, arch: process.arch, download, inspectZip: inspectRuntimeZip, verifySigned, appVersion, availableBytes, copy: executeCopy, unpack: async (a, d, signal) => { await execute('/usr/bin/ditto', ['-x', '-k', a, d], { signal }) }, lockWaitMs: 20 * 60 * 1000, lockPollMs: 250 }
+function componentManifest(): RangeManifest | undefined { try { return require('../runtime-components.json') as RangeManifest } catch (e) { if ((e as NodeJS.ErrnoException).code === 'MODULE_NOT_FOUND') return; throw e } }
+const defaultDeps: Dependencies = { manifest: componentManifest, downloadMinimalZip, localCandidates: () => ['/Applications/ChatGPT.app', '/Applications/Codex.app', join(homedir(), 'Applications/ChatGPT.app'), join(homedir(), 'Applications/Codex.app')], localHomes: () => [...new Set([...(process.env.CODEX_HOME && isAbsolute(process.env.CODEX_HOME) ? [resolve(process.env.CODEX_HOME)] : []), join(homedir(), '.codex')])], platform: process.platform, arch: process.arch, download, inspectZip: inspectRuntimeZip, verifySigned, appVersion, availableBytes, copy: executeCopy, unpack: async (a, d, signal) => { await execute('/usr/bin/ditto', ['-x', '-k', a, d], { signal }) }, lockWaitMs: 20 * 60 * 1000, lockPollMs: 250 }
 interface LockOwner { pid: number; token: string; startTime: number }
 function deadOwner(owner: LockOwner) {
   if (!Number.isSafeInteger(owner.pid) || owner.pid <= 0 || typeof owner.token !== 'string') return false
@@ -343,6 +347,12 @@ function createBootstrap(getSource: () => RuntimeSource, d: Dependencies) {
       // rm without recursive never follows a marker symlink; skipLocal must not inspect its contents.
       await fs.rm(join(root, LOCAL_READY), { force: true })
       if (!options.force && await cacheValid(p, s, d, options.signal)) { options.log?.('Using verified cached official Codex CU runtime'); return p }
+      const minimalManifest = matchingManifest(d.manifest?.(), s)
+      if (minimalManifest && !options.archivePath && !options.sourceApp) {
+        const minimal = await prepareMinimal(root, s, d, minimalManifest, options)
+        if (minimal) return minimal
+        options.log?.('HTTP Range unsupported; using separately verified full official ZIP')
+      }
       options.log?.('Preparing pinned official Codex CU runtime ' + s.appVersion)
       // Budget includes ZIP, extracted app, copied runtime and temporary previous release.
       if (await d.availableBytes(root) < s.bytes * 8) throw Error('Insufficient disk space for official runtime setup; free at least ' + Math.ceil(s.bytes * 8 / 1024 ** 3) + ' GiB and retry')
@@ -362,6 +372,10 @@ function createBootstrap(getSource: () => RuntimeSource, d: Dependencies) {
       }
       abort(options.signal)
       const resources = join(app, 'Contents/Resources')
+      if (minimalManifest) {
+        const trimmed = await prepareMinimal(root, s, d, minimalManifest, { ...options, force: true }, resources)
+        if (trimmed) return trimmed
+      }
       for (const name of ['cua_node', 'codex-cli']) { const source = join(resources, name); if (!(await fs.lstat(source)).isDirectory()) throw Error('Official app is missing runtime layout: ' + name); await containedTree(source); await fs.mkdir(dirname(join(staged.releaseDir, name)), { recursive: true, mode: 0o700 }); await d.copy(source, join(staged.releaseDir, name), options.signal) }
       const cua = join(staged.releaseDir, 'cua_node/lib/node_modules/@oai/sky', APP)
       await fs.mkdir(dirname(staged.appPath), { recursive: true, mode: 0o700 }); await d.copy(cua, staged.appPath, options.signal)
@@ -377,7 +391,7 @@ function createBootstrap(getSource: () => RuntimeSource, d: Dependencies) {
     } catch (e) { abort(options.signal); throw new Error('Codex CU runtime setup failed. Retry setup after correcting the source, permissions or disk space: ' + (e instanceof Error ? e.message : String(e)), { cause: e }) }
     finally { try { if (staging) await fs.rm(safeChild(root, staging), { recursive: true, force: true }) } finally { await releaseLock() } }
   }
-  return { ensureRuntime: ensure, readPreparedRuntime(runtimeDir?: string) { try { const s = getSource(); validateSource(s); const root = resolveRuntimeRoot(runtimeDir), local = localMarker(root, s, d); if (local) return local; const p = paths(root, s); return marker(p, s) ? p : undefined } catch { return undefined } } }
+  return { ensureRuntime: ensure, readPreparedRuntime(runtimeDir?: string) { try { const s = getSource(); validateSource(s); const root = resolveRuntimeRoot(runtimeDir), local = localMarker(root, s, d); if (local) return local; const p = paths(root, s); if (marker(p, s)) return p; const m = matchingManifest(d.manifest?.(), s); return m ? readMinimal(root, s, d, m) : undefined } catch { return undefined } } }
 }
 async function executeCopy(source: string, destination: string, signal?: AbortSignal) {
   abort(signal)

@@ -24,16 +24,21 @@ dsh --profile codex-cu-experiment
 
 1. **先检测本地** /Applications 与 ~/Applications 的 Codex/ChatGPT 兼容 app：确认 Node、CLI、CU 来自同一已验证 cohort，验证版本、签名、标识和文件摘要。完整且有效时 **直接复用已有 Node/CLI/CU 路径，不复制 Node/CLI，不下载**。
    - CU 还需匹配 CODEX_HOME/computer-use 的 canonical 布局；本地已有匹配 CU 则直接用。若只缺这份 canonical CU，但已有 app 包含它，仅补齐 CU 到私有 home，不远程下载，不复制用户账号文件。
-   - 本地缺失/不匹配时，先复用已经验证的管理缓存；连缓存也缺失才下载固定官方 ZIP。原 app 更新/删除/损坏会让本地引用失效，下一次重新检测，不继续执行旧 marker。
+   - 完整组合不可用时，**按组件**复用：Node、CLI、CU 分别按固定的逐文件 SHA256/类型/权限和完整签名单独验证；合格的本地 Node/CLI 直接引用原路径，合格的 CU 复制到插件私有 CODEX_HOME（不占用、不覆盖 ~/.codex）。
+   - 仍缺的组件才通过 **HTTP Range 从固定官方 ZIP 只取所需文件**（见下文“轻量下载”），不再下载整个 ChatGPT 归档。原 app 更新/删除/损坏会让本地引用失效，下一次重新检测，不继续执行旧 marker。
    - 当前兼容验证 cohort 为 26.1007.30912，不会仅因其他版本也“存在”就盲目混用。
 2. 核验维护者固定的 SHA256、归档大小、解包路径/符号链接，验证根 app 的完整签名、版本和 OpenAI Team ID。
-3. 只有需要管理下载时才保留完整 cua_node 与 codex-cli 目录，包括签名 Node、原生 NodeREPL、CU SDK、配套模块和 CodexCLI.app；本地直接复用时不拷贝这些目录，不靠公共 npm 安装本轮 registry 不可获得的 @oai 专用模块。
+3. 轻量布局（minimal-v1）只包含原生 MCP 链路实际需要的三组官方文件：签名 Node 可执行文件（+LICENSE）、完整 CodexCLI.app（CU 内部要调用 codex app-server，实测去掉 CLI 会报 -10005）、完整签名 Codex Computer Use.app。不再携带 node_repl、@oai JS 模块等桌面 app 内其他内容。
 4. 在专属 CODEX_HOME/computer-use 中准备完整 Codex Computer Use.app；仅设置 SKY_CUA_SERVICE_PATH 而缺少 canonical app 不足以让官方 host 工作。
 5. 临时目录验证完成后原子发布；缓存命中重新核验必要签名/摘要，失败可重试。进程内复用下载、跨进程安装锁，避免重复下载或半成品被当成 ready。
 
 本地引用的验证标记与下载缓存位于用户 Library/Caches/dsh-codex-computer-use/runtime；缓存按版本分目录。不向 /Applications 安装整个 Codex/ChatGPT，不修改官方副本，不复制用户认证、账号、配置或会话文件。本地复用时官方 CLI 会使用所选已有 CODEX_HOME，插件不读取或复制其认证文件。专属 CODEX_HOME 不是原生 CU 全局 IPC 的完全隔离承诺。
 
-第一次无本地兼容 app 时，需下载约 **686 MiB** 的官方归档；运行时约数百 MiB，解压/验证阶段需约 **6 GiB 可用空间**。临时完整桌面 app 验证后删除，只保留依赖目录和 CU app。已准备的兼容版本不会每次重下载，也不会自动追随 latest。
+### 轻量下载
+
+第一次无本地兼容组件时，只从固定官方 ZIP 中按字节范围下载所需组件：**约 174 MB**（完整归档 719 MB，减少约 76%）。只缺 CU 时约 36 MB，只缺 CLI 时约 98 MB，只缺 Node 时约 39 MB。
+
+安全校验：固定官方 URL 与总大小；ZIP 中央目录 SHA256；每个文件压缩数据与解压内容 SHA256、类型、权限；重组后 Node / CLI / CU 的完整 Apple 签名（Team 2DC432GLL2）。任何哈希、路径、重定向或签名错误都直接失败，**不会**静默降级。只有服务器不支持 Range（返回 200/416）时，才回退到下载并校验完整官方 ZIP（719 MB，需约 6 GiB 临时空间），回退结果同样裁剪成轻量布局。已准备的版本不会每次重下载，也不会自动追随 latest。组件清单见 [runtime-components.json](./runtime-components.json)。
 
 固定来源：[官方版本 ZIP](https://persistent.oaistatic.com/codex-app-prod/ChatGPT-darwin-arm64-26.1007.30912.zip)，版本 26.1007.30912；SHA256 是本轮从官方 HTTPS 下载、验证官方签名后维护者固定的摘要，**不是宣称 OpenAI 发布了此 SHA 清单**。见 [来源清单](./runtime-source.json)。选用与已验证 CU/CLI 匹配的版本，避免从多个 latest 来源拼出不兼容组合。
 
