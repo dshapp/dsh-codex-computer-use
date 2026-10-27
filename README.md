@@ -72,16 +72,16 @@
 
 1. **安装插件**（实验版请带 `@experimental` 标签）：
 
-   ~~~sh
+   ```sh
    dsh plugin --profile web add dsh-codex-computer-use@experimental
-   ~~~
+   ```
 
    如果 DSH 提示构建被拦截（pnpm 默认禁止安装脚本），在该 profile 的 `pnpm-workspace.yaml` 里允许本包后重跑：
 
-   ~~~yaml
+   ```yaml
    allowBuilds:
      dsh-codex-computer-use: true
-   ~~~
+   ```
 
    本机 npm 默认源是内部镜像时，可临时指定公共源：`npm_config_registry=https://registry.npmjs.org dsh plugin ...`。
 
@@ -91,20 +91,20 @@
 
 想确认一切就绪，可以跑一次只读体检（不点击、不输入）：
 
-~~~sh
+```sh
 dsh-codex-cu-doctor
-~~~
+```
 
 ## 轻量又可信的运行时
 
-~~~mermaid
+```mermaid
 flowchart LR
   agent(["dsh 里的 Agent"]) -- "mcp__codex_cu__*" --> bridge["dsh-mcp-client<br/>（通用 MCP 桥）"]
   bridge --> node["OpenAI 签名 Node<br/>+ 权限代理"]
   node --> cu["官方 Computer Use<br/>client / service"]
   cu -- "辅助功能 + 截图" --> apps["你的 Mac 应用"]
   style node fill:#0A84FF,stroke:#0A84FF,color:#fff
-~~~
+```
 
 **为什么要签名 Node？** 用普通 Node 直接启动官方 Computer Use，会被 `-10000 Sender process is not authenticated` 拒绝。本插件用 OpenAI 签名的 Node 运行一个很小的 MCP 权限代理，再拉起官方 client；同时提供官方 CLI 路径（缺少它会报 `-10005`），并实现 `elicitation/create` 回调，使应用访问授权能在 DSH 中正常走完。
 
@@ -143,7 +143,7 @@ flowchart LR
 
 在 profile 里覆盖稳定的 row id：
 
-~~~yaml
+```yaml
 - id: computer-use-codex-cu
   config:
     autoSetup: true                 # false：首次使用也不自动下载
@@ -151,7 +151,7 @@ flowchart LR
     permissionMode: allow-all       # allow-all | prompt | deny
     allowedApps: []                 # deny 模式下的白名单（应用显示名称）
     toolCallTimeoutMs: 60000
-~~~
+```
 
 - `mode: direct` 保留直连诊断模式；同时提供 `appPath` / `nodePath` / `cliPath`（均须为绝对路径）会跳过自动准备，但插件不会因此宣称它们是官方签名。
 - 显式 `codexHome` 优先；自定义目录需自行满足 `computer-use` 的标准布局。
@@ -164,13 +164,13 @@ flowchart LR
 
 平时不需要手动运行；遇到问题时可用：
 
-~~~sh
+```sh
 dsh-codex-cu-setup                 # 准备 / 补齐运行时
 dsh-codex-cu-setup --check         # 只检查就绪标记，不下载
 dsh-codex-cu-setup --force         # 重新校验并准备同一固定版本（完成前不影响旧缓存）
 dsh-codex-cu-setup --archive /absolute/path/official-pinned.zip --skip-local   # 用同一官方 ZIP 离线准备
 dsh-codex-cu-doctor                # 真实只读体检：initialize / listTools / list_apps
-~~~
+```
 
 `--runtime-dir` 指定绝对缓存目录；`--source-app` 只接受版本和签名都正确的官方 app。
 
@@ -178,21 +178,21 @@ dsh-codex-cu-doctor                # 真实只读体检：initialize / listTools
 
 ## 卸载与回退
 
-~~~sh
+```sh
 dsh plugin --profile web remove dsh-codex-computer-use
-~~~
+```
 
 卸载不会终止共享的 Computer Use 服务，也不会删除原有的 Codex / ChatGPT 安装或任何账号文件。确认没有客户端在使用后，可手动清理 `~/Library/Caches/dsh-codex-computer-use`。想换回 KimiCU，切换到装有 [dsh-kimi-computer-use](https://github.com/dshapp/dsh-kimi-computer-use) 的 profile 即可。
 
 ## 开发
 
-~~~sh
+```sh
 DSH_CODEX_CU_SKIP_SETUP=1 npm install
 npm run check        # 构建 + 单元测试
 npm run test:pack    # 校验发布包内容
 npm run setup        # 在本机准备运行时
 npm run doctor       # 真实只读体检
-~~~
+```
 
 | 路径 | 内容 |
 | --- | --- |
@@ -212,7 +212,7 @@ npm run doctor       # 真实只读体检
 
 **DSH App** 是为 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（`dsh`）打造的一组客户端与插件。它们都接入你电脑上**同一个** dsh——会话、模型与插件处处互通，按需组合即可。下载与文档见 **[dshapp.github.io](https://dshapp.github.io/)**。
 
-~~~mermaid
+```mermaid
 flowchart LR
   subgraph pc["你的电脑"]
     mac["macOS App"] --> dsh(["dsh"])
@@ -227,7 +227,7 @@ flowchart LR
   mini["微信小程序"] --> proxy
   proxy <--> mb
   style codex fill:#0A84FF,stroke:#0A84FF,color:#fff
-~~~
+```
 
 | | 项目 | 做什么 | 链接 |
 | --- | --- | --- | --- |
