@@ -28,7 +28,7 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 15
     env:
-      NPM_CONFIG_CACHE: ${{ runner.temp }}/npm-cache
+      NPM_CONFIG_CACHE: /tmp/dsh-npm-cache
     outputs:
       version: ${{ steps.metadata.outputs.version }}
       dist_tag: ${{ steps.metadata.outputs.dist_tag }}
@@ -72,7 +72,7 @@ jobs:
       contents: read
       id-token: write
     env:
-      NPM_CONFIG_CACHE: ${{ runner.temp }}/npm-cache
+      NPM_CONFIG_CACHE: /tmp/dsh-npm-cache
     steps:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:

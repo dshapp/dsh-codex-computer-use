@@ -1,6 +1,6 @@
 {
   "name": "dsh-codex-computer-use",
-  "version": "0.1.0-experimental.4",
+  "version": "0.1.0-experimental.5",
   "description": "DSH Codex Computer Use plugin with automatic, verified official runtime bootstrap; no preinstalled Codex required.",
   "type": "module",
   "license": "MIT",

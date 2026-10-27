@@ -10,6 +10,11 @@ import type { RuntimeSource } from '../src/bootstrap.ts'
 const directories: string[] = []
 afterEach(() => { vi.unstubAllGlobals(); for (const d of directories.splice(0)) rmSync(d, { force: true, recursive: true }) })
 function temp() { const d = realpathSync(mkdtempSync(join(tmpdir(), 'codex-bootstrap-test-'))); directories.push(d); return d }
+function barrier() {
+  let resolve!: () => void
+  const promise = new Promise<void>(r => { resolve = r })
+  return { promise, resolve }
+}
 const bytes = Buffer.from('small fake official archive; never executed')
 const source: RuntimeSource = { id: 'fixture-darwin-arm64', appVersion: '26.1007.30912', platform: 'darwin', arch: 'arm64', url: 'https://persistent.oaistatic.com/codex-app-prod/fixture.zip', sha256: createHash('sha256').update(bytes).digest('hex'), bytes: bytes.length, teamIdentifier: '2DC432GLL2', layoutVersion: 1 }
 const APP = 'Codex Computer Use.app'
@@ -108,6 +113,78 @@ describe('official runtime bootstrap (mock download, signatures, app and native 
     const s = setup(); await fs.mkdir(join(s.runtimeDir, '.install-lock'), { recursive: true }); await fs.writeFile(join(s.runtimeDir, '.install-lock/owner.json'), JSON.stringify({ pid: 2147483647, token: 'dead', startTime: 1 }))
     const contenders = Array.from({ length: 5 }, () => createBootstrapForTesting(source, s.deps))
     await Promise.all(contenders.map(a => a.ensureRuntime({ runtimeDir: s.runtimeDir, skipLocal: true }))); expect(s.download).toHaveBeenCalledTimes(1)
+  })
+  it('detaches release with a live reclaim guard and preserves the next owner during tomb cleanup', async () => {
+    const preparing = barrier(), finishPreparation = barrier(), guardReady = barrier(), finishGuard = barrier()
+    const removing = barrier(), finishRemoval = barrier(), nextPreparing = barrier(), finishNext = barrier()
+    const controller = new AbortController()
+    let tomb = '', oldToken = '', guardToken = ''
+    const s = await localSetup(true, {
+      verifySigned: async () => { preparing.resolve(); await finishPreparation.promise },
+      lockFs: { ...fs, rm: async (path, options) => {
+        // A real guard is held at the old inode when release starts. With the old
+        // public-path rm this assertion fails deterministically, not probabilistically.
+        tomb = String(path)
+        removing.resolve(); await finishRemoval.promise
+        await fs.rm(path, options)
+      } },
+    })
+    const directory = join(s.runtimeDir, '.install-lock'), guardFile = join(directory, '.reclaim/owner.json')
+    const waiting = createBootstrapForTesting(source, { ...s.deps, lockFs: { ...fs, writeFile: async (path, data, options) => {
+      await fs.writeFile(path, data, options)
+      if (String(path) === guardFile) { guardToken = JSON.parse(String(data)).token; guardReady.resolve(); await finishGuard.promise }
+    } } })
+    const next = createBootstrapForTesting(source, { ...s.deps, verifySigned: async () => {}, lockFs: undefined,
+      download: async (_source, file) => { nextPreparing.resolve(); await finishNext.promise; await fs.writeFile(file, bytes) },
+    })
+    const localTask = s.ensureRuntime({ runtimeDir: s.runtimeDir })
+    const tasks: Promise<unknown>[] = [localTask]
+    try {
+      await preparing.promise
+      const waitingTask = waiting.ensureRuntime({ runtimeDir: s.runtimeDir, skipLocal: true, signal: controller.signal })
+      const cancelled = expect(waitingTask).rejects.toMatchObject({ name: 'AbortError' }); tasks.push(cancelled)
+      await guardReady.promise
+      // Recursive removal must never follow a symlink out of the owned tomb.
+      const sentinel = join(temp(), 'sentinel'); await put(sentinel, 'untouched')
+      await fs.symlink(dirname(sentinel), join(directory, '.reclaim/outside'))
+      finishPreparation.resolve(); await removing.promise
+      expect(dirname(tomb)).toBe(s.runtimeDir)
+      expect(tomb).toMatch(/\/\.released-lock-[a-f0-9-]+$/)
+      oldToken = JSON.parse(await fs.readFile(join(tomb, 'owner.json'), 'utf8')).token
+      expect(JSON.parse(await fs.readFile(join(tomb, '.reclaim/owner.json'), 'utf8')).token).toBe(guardToken)
+      await expect(fs.stat(directory)).rejects.toMatchObject({ code: 'ENOENT' })
+      const nextTask = next.ensureRuntime({ runtimeDir: s.runtimeDir, skipLocal: true }); tasks.push(nextTask)
+      await nextPreparing.promise
+      const nextIdentity = await fs.stat(directory), nextOwner = await fs.readFile(join(directory, 'owner.json'), 'utf8')
+      expect(JSON.parse(nextOwner).token).not.toBe(oldToken)
+      await put(guardFile, JSON.stringify({ pid: process.pid, token: 'next-guard', startTime: Date.now() }))
+      // The delayed old reclaimer sees the new live owner, and its guard-token
+      // cleanup must not remove either the replacement directory or its contents.
+      controller.abort(Error('stop contender')); finishGuard.resolve(); await cancelled
+      finishRemoval.resolve(); expect((await localTask).provenance?.kind).toBe('local')
+      expect((await fs.stat(directory)).ino).toBe(nextIdentity.ino)
+      expect(await fs.readFile(join(directory, 'owner.json'), 'utf8')).toBe(nextOwner)
+      expect(JSON.parse(await fs.readFile(guardFile, 'utf8')).token).toBe('next-guard')
+      await expect(fs.stat(tomb)).rejects.toMatchObject({ code: 'ENOENT' })
+      expect(await fs.readFile(sentinel, 'utf8')).toBe('untouched')
+      finishNext.resolve(); expect((await nextTask).provenance).toBeUndefined()
+      expect(await fs.readdir(s.runtimeDir)).toEqual(['versions'])
+    } finally {
+      controller.abort(Error('stop contender'))
+      for (const gate of [finishPreparation, finishGuard, finishRemoval, finishNext]) gate.resolve()
+      await Promise.allSettled(tasks)
+    }
+  })
+  it('does not rename or remove a lock whose owner token changed before release', async () => {
+    const rename = vi.fn(fs.rename), s = setup({ lockFs: { ...fs, rename }, availableBytes: async root => {
+      const file = join(root, '.install-lock/owner.json'), owner = JSON.parse(await fs.readFile(file, 'utf8'))
+      await fs.writeFile(file, JSON.stringify({ ...owner, token: 'replacement-owner' }))
+      return 0
+    } })
+    await expect(s.ensureRuntime({ runtimeDir: s.runtimeDir, skipLocal: true })).rejects.toThrow('disk space')
+    expect(rename).not.toHaveBeenCalled()
+    expect(JSON.parse(await fs.readFile(join(s.runtimeDir, '.install-lock/owner.json'), 'utf8')).token).toBe('replacement-owner')
+    expect(await fs.readdir(s.runtimeDir)).toEqual(['.install-lock'])
   })
   it('real HTTP streaming path verifies exact small pinned bytes, without network', async () => {
     const s = setup(); const fetch = vi.fn(async () => new Response(bytes, { status: 200, headers: { 'content-length': String(bytes.length), 'content-type': 'application/zip' } })); vi.stubGlobal('fetch', fetch)
@@ -284,8 +361,15 @@ describe('direct installed cohort reuse (all signatures mocked, no native execut
     expect(s.readPreparedRuntime(s.runtimeDir)).toBeUndefined()
   })
   it('isolates different in-process policies instead of lending a local flight to skipLocal', async () => {
-    const s = await localSetup()
-    const [local, managed] = await Promise.all([s.ensureRuntime({ runtimeDir: s.runtimeDir }), s.ensureRuntime({ runtimeDir: s.runtimeDir, skipLocal: true })])
+    const localPreparing = barrier(), finishLocal = barrier()
+    const s = await localSetup(true, { verifySigned: async () => { localPreparing.resolve(); await finishLocal.promise } })
+    const localTask = s.ensureRuntime({ runtimeDir: s.runtimeDir })
+    // Starting both calls together does not guarantee mkdir acquisition order.
+    // Hold the local owner so managed really contends and is the final publisher.
+    await localPreparing.promise
+    const managedTask = s.ensureRuntime({ runtimeDir: s.runtimeDir, skipLocal: true })
+    finishLocal.resolve()
+    const [local, managed] = await Promise.all([localTask, managedTask])
     expect(local.provenance?.kind).toBe('local'); expect(managed.provenance).toBeUndefined(); expect(s.download).toHaveBeenCalledTimes(1)
     expect(s.readPreparedRuntime(s.runtimeDir)).toEqual(managed)
   })

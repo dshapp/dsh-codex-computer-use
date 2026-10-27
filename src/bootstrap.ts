@@ -136,6 +136,7 @@ interface Dependencies {
   localCandidates: () => string[]; localHomes: () => string[];
   platform: string; arch: string; download: typeof download; inspectZip: typeof inspectRuntimeZip; verifySigned: typeof verifySigned; appVersion: typeof appVersion; availableBytes: typeof availableBytes;
   copy: (source: string, destination: string, signal?: AbortSignal) => Promise<void>; unpack: (archive: string, destination: string, signal?: AbortSignal) => Promise<void>; lockWaitMs: number; lockPollMs: number
+  lockFs?: Pick<typeof fs, 'mkdir' | 'writeFile' | 'rename' | 'rm'> // Internal test seam for deterministic lock/guard races.
 }
 const defaultDeps: Dependencies = { localCandidates: () => ['/Applications/ChatGPT.app', '/Applications/Codex.app', join(homedir(), 'Applications/ChatGPT.app'), join(homedir(), 'Applications/Codex.app')], localHomes: () => [...new Set([...(process.env.CODEX_HOME && isAbsolute(process.env.CODEX_HOME) ? [resolve(process.env.CODEX_HOME)] : []), join(homedir(), '.codex')])], platform: process.platform, arch: process.arch, download, inspectZip: inspectRuntimeZip, verifySigned, appVersion, availableBytes, copy: executeCopy, unpack: async (a, d, signal) => { await execute('/usr/bin/ditto', ['-x', '-k', a, d], { signal }) }, lockWaitMs: 20 * 60 * 1000, lockPollMs: 250 }
 interface LockOwner { pid: number; token: string; startTime: number }
@@ -143,10 +144,10 @@ function deadOwner(owner: LockOwner) {
   if (!Number.isSafeInteger(owner.pid) || owner.pid <= 0 || typeof owner.token !== 'string') return false
   try { process.kill(owner.pid, 0); return false } catch (e) { return (e as NodeJS.ErrnoException).code === 'ESRCH' }
 }
-async function reclaimLock(root: string, directory: string): Promise<boolean> {
+async function reclaimLock(root: string, directory: string, io: NonNullable<Dependencies['lockFs']>): Promise<boolean> {
   // Serialize reclaimers inside the stale inode; a contender can never rename a new live owner's lock.
   const guard = join(directory, '.reclaim'), guardToken = randomUUID()
-  try { await fs.mkdir(guard, { mode: 0o700 }); await fs.writeFile(join(guard, 'owner.json'), JSON.stringify({ pid: process.pid, token: guardToken, startTime: Date.now() }), { mode: 0o600 }) }
+  try { await io.mkdir(guard, { mode: 0o700 }); await io.writeFile(join(guard, 'owner.json'), JSON.stringify({ pid: process.pid, token: guardToken, startTime: Date.now() }), { mode: 0o600 }) }
   catch (e) {
     if ((e as NodeJS.ErrnoException).code === 'EEXIST') {
       // A crashed reclaimer must not leave its parent lock permanently unrecoverable.
@@ -169,7 +170,7 @@ async function reclaimLock(root: string, directory: string): Promise<boolean> {
   }
 }
 async function lock(root: string, d: Dependencies, signal?: AbortSignal): Promise<() => Promise<void>> {
-  const directory = join(root, '.install-lock'), token = randomUUID(), started = Date.now()
+  const directory = join(root, '.install-lock'), token = randomUUID(), started = Date.now(), io = d.lockFs ?? fs
   while (true) {
     abort(signal); noSymlink(directory)
     let acquired = false
@@ -177,12 +178,22 @@ async function lock(root: string, d: Dependencies, signal?: AbortSignal): Promis
     catch (e) {
       if (acquired) { await fs.rm(safeChild(root, directory), { recursive: true, force: true }); throw e }
       if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e
-      if (await reclaimLock(root, directory).catch(() => false)) continue
+      if (await reclaimLock(root, directory, io).catch(() => false)) continue
       if (Date.now() - started > d.lockWaitMs) throw Error('Timed out waiting for runtime installation lock; retry setup')
       await delay(d.lockPollMs, undefined, { signal })
     }
   }
-  return async () => { noSymlink(directory); const owner = JSON.parse(await fs.readFile(join(directory, 'owner.json'), 'utf8')) as LockOwner; if (owner.token === token) await fs.rm(safeChild(root, directory), { recursive: true, force: true }) }
+  return async () => {
+    noSymlink(directory)
+    const owner = JSON.parse(await fs.readFile(join(directory, 'owner.json'), 'utf8')) as LockOwner
+    if (owner.token !== token) return
+    // Stop exposing this inode at the acquisition path before recursive cleanup.
+    // Live contenders may be adding/removing .reclaim there; deleting the public
+    // path can fail with ENOTEMPTY or descend into a replacement owner's lock.
+    const tomb = safeChild(root, join(root, '.released-lock-' + randomUUID()))
+    await io.rename(safeChild(root, directory), tomb)
+    await io.rm(tomb, { recursive: true, force: true })
+  }
 }
 async function containedTree(root: string, current = root): Promise<void> {
   for (const e of await fs.readdir(current, { withFileTypes: true })) {
