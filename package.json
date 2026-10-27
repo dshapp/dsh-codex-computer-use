@@ -94,5 +94,9 @@
   "homepage": "https://github.com/dshapp/dsh-codex-computer-use#readme",
   "bugs": {
     "url": "https://github.com/dshapp/dsh-codex-computer-use/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
   }
 }

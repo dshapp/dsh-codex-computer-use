@@ -1,0 +1,105 @@
+name: Publish npm
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Expected package version (empty uses package.json)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
+
+env:
+  DSH_CODEX_CU_SKIP_SETUP: '1'
+  NPM_CONFIG_REGISTRY: https://registry.npmjs.org
+
+jobs:
+  validate:
+    runs-on: macos-15
+    timeout-minutes: 15
+    env:
+      NPM_CONFIG_CACHE: ${{ runner.temp }}/npm-cache
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      dist_tag: ${{ steps.metadata.outputs.dist_tag }}
+      tarball: ${{ steps.metadata.outputs.tarball }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Require arm64 macOS for native-wiring tests
+        run: node -e "console.log(process.platform, process.arch); if (process.platform !== 'darwin' || process.arch !== 'arm64') process.exit(1)"
+      - name: Install public dependencies without runtime bootstrap
+        run: npm ci --ignore-scripts
+      - name: Typecheck, build, test and production-package smoke
+        run: npm run check && npm run test:pack
+      - name: Validate release metadata
+        id: metadata
+        env:
+          EXPECTED_VERSION: ${{ inputs.version }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: node scripts/release-metadata.mjs
+      - name: Pack built payload without lifecycle scripts
+        run: npm pack --ignore-scripts --pack-destination .
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: npm-package
+          path: ${{ steps.metadata.outputs.tarball }}
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    if: github.repository == 'dshapp/dsh-codex-computer-use' && (github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      NPM_CONFIG_CACHE: ${{ runner.temp }}/npm-cache
+    steps:
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+      - name: Use OIDC-capable npm
+        run: npm install --global npm@11 --ignore-scripts
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: npm-package
+      - name: Verify immutable payload and publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          PACKAGE_FILE: ${{ needs.validate.outputs.tarball }}
+          EXPECTED_VERSION: ${{ needs.validate.outputs.version }}
+          DIST_TAG: ${{ needs.validate.outputs.dist_tag }}
+        run: |
+          set -euo pipefail
+          node --input-type=module - <<'JS'
+          import { execFileSync } from 'node:child_process';
+          const p = JSON.parse(execFileSync('tar', ['-xOf', process.env.PACKAGE_FILE, 'package/package.json'], {encoding:'utf8'}));
+          if (p.name !== 'dsh-codex-computer-use' || p.version !== process.env.EXPECTED_VERSION) throw Error('Payload identity mismatch');
+          JS
+          if npm view "dsh-codex-computer-use@$EXPECTED_VERSION" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
+            echo "Version already published; no overwrite attempted."
+          else
+            npm publish "$PACKAGE_FILE" --access public --provenance --ignore-scripts --tag "$DIST_TAG" --registry=https://registry.npmjs.org
+          fi
+          npm view "dsh-codex-computer-use@$EXPECTED_VERSION" version --registry=https://registry.npmjs.org
+          echo "npm: https://www.npmjs.com/package/dsh-codex-computer-use/v/$EXPECTED_VERSION" >> "$GITHUB_STEP_SUMMARY"
