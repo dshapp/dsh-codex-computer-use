@@ -1,0 +1,9 @@
+# Codex CU: default official signed runtime + MCP app-permission proxy.
+# Discovery alone does not certify app access or GUI input behavior.
+- insert:
+    - id: computer-use-codex-cu
+      name: dsh-codex-computer-use
+      config: {}
+
+    - id: computer-use-codex-cu-skills
+      name: dsh-codex-computer-use/skills

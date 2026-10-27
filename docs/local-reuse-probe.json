@@ -1,0 +1,32 @@
+{
+  "pluginVersion": "0.1.0-experimental.4",
+  "localDetection": {
+    "provenance": "local",
+    "node": "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node",
+    "cli": "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
+    "cu": "existing canonical CU under selected CODEX_HOME",
+    "cohort": "26.1007.30912",
+    "nodeCopied": false,
+    "cliCopied": false,
+    "cuCopied": false,
+    "downloaded": false,
+    "accountFilesCopied": false
+  },
+  "live": {
+    "doctor": "read-only-call-ok",
+    "dsh": {
+      "toolCount": 10,
+      "skillRegistered": true,
+      "isError": false
+    }
+  },
+  "tests": {
+    "files": 6,
+    "passed": 113
+  },
+  "distribution": {
+    "nodeExecutable": "Node license plus complete bundled notices",
+    "cli": "official exact tag Apache-2.0 release with NOTICE and Ratatui license",
+    "cuFullRuntime": "not publicly mirrored; no verified redistribution authorization"
+  }
+}

@@ -1,0 +1,8 @@
+- id: system-prompt
+  name: cordis:codex-cu-test-system-prompt
+- id: tools
+  name: cordis:codex-cu-test-tools
+  config:
+    mode: native
+- id: skills
+  name: cordis:codex-cu-test-skills

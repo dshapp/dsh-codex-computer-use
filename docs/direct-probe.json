@@ -1,0 +1,27 @@
+{
+  "observedOn": "2026-10-27",
+  "source": "node lib/doctor.js (final build, this macOS host)",
+  "exitCode": 1,
+  "command": "/Users/user/.codex/computer-use/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient",
+  "status": "authentication-rejected",
+  "discovery": true,
+  "toolNames": [
+    "list_apps",
+    "get_app_state",
+    "click",
+    "perform_secondary_action",
+    "set_value",
+    "select_text",
+    "scroll",
+    "drag",
+    "press_key",
+    "type_text"
+  ],
+  "readOnlyCall": "failed",
+  "appInteraction": "not-tested",
+  "message": "Vendor rejected the sender process (-10000). MCP discovery is not authorization. This plugin cannot grant OpenAI process trust; no authentication bypass is attempted. Accessibility permissions are a separate check.",
+  "server": {
+    "name": "Computer Use",
+    "version": "14e7d17f1f59e77ca541a15071e980628cd08977a4dda111c96e0564d337056b"
+  }
+}

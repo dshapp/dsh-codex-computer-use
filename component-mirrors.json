@@ -1,0 +1,28 @@
+{
+  "release": "v0.1.0-experimental.4",
+  "policy": "Only explicitly licensed artifacts are mirrored; full CU runtime remains on official source without verified public redistribution permission.",
+  "node": {
+    "url": "https://github.com/dshapp/dsh-codex-computer-use/releases/download/v0.1.0-experimental.4/node-24.21.0-cua.1-darwin-arm64.tar.gz",
+    "sha256": "9ce764df4dbb032cea3243d2d1edf3011490d24cbb0b9f80a15382b46dcf2179",
+    "scope": "Node executable + complete Node LICENSE only",
+    "version": "24.21.0-cua.1"
+  },
+  "cli": {
+    "url": "https://github.com/dshapp/dsh-codex-computer-use/releases/download/v0.1.0-experimental.4/codex-0.162.0-alpha.17.2-darwin-arm64.tar.gz",
+    "sha256": "cc893d1787bedbf34001bf2d16378f479393b9e635f8dbc74e8abb7870fe3998",
+    "upstream": "https://github.com/openai/codex/releases/download/rust-v0.162.0-alpha.17.2/codex-aarch64-apple-darwin.tar.gz",
+    "licenseAssets": [
+      "codex-0.162.0-alpha.17.2-LICENSE.txt",
+      "codex-0.162.0-alpha.17.2-NOTICE.txt",
+      "codex-0.162.0-alpha.17.2-RATATUI-LICENSE.txt"
+    ],
+    "version": "0.162.0-alpha.17.2",
+    "validation": "Archive SHA matches upstream; signed binary and version verified; live list_apps through existing CU cohort passed"
+  },
+  "cu": {
+    "mirrored": false,
+    "reason": "No verified public redistribution authorization for CU/@oai/node_repl",
+    "officialUrl": "https://persistent.oaistatic.com/codex-app-prod/ChatGPT-darwin-arm64-26.1007.30912.zip",
+    "sha256": "b699a8c2d5a2f23cac59dc67388e25af4bf5fc2fb6ab30ffa243a968e4f815a3"
+  }
+}

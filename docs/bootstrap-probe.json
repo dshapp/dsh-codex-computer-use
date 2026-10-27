@@ -1,0 +1,56 @@
+{
+  "pluginVersion": "0.1.0-experimental.3",
+  "observedOn": "2026-10-27",
+  "source": {
+    "url": "https://persistent.oaistatic.com/codex-app-prod/ChatGPT-darwin-arm64-26.1007.30912.zip",
+    "bytes": 719413559,
+    "sha256": "b699a8c2d5a2f23cac59dc67388e25af4bf5fc2fb6ab30ffa243a968e4f815a3",
+    "pinType": "maintainer observed official download; not an OpenAI-published SHA list",
+    "signingTeam": "2DC432GLL2",
+    "appleAnchorChecked": true
+  },
+  "postinstall": {
+    "ordinaryProductionInstall": true,
+    "defaultDownload": true,
+    "skipInstalledApps": true,
+    "completed": true,
+    "exitCode": 0,
+    "observedDuration": "about 12 minutes on this network",
+    "accountFilesCopied": false
+  },
+  "managedRuntime": {
+    "noApplicationsPaths": true,
+    "homeIsPluginOwned": true,
+    "fullCuaNodeAndCli": true,
+    "canonicalAppPrepared": true
+  },
+  "liveAcceptance": {
+    "doctor": "read-only-call-ok",
+    "dshListApps": {
+      "toolCount": 10,
+      "skillRegistered": true,
+      "isError": false
+    },
+    "emptyHomeListApps": {
+      "managedExecutablesOnly": true,
+      "isError": false
+    },
+    "finderState": {
+      "isError": false,
+      "axTextChars": 5733,
+      "jpegBytes": 624498,
+      "jpegHeaderValid": true,
+      "rawContentsOmitted": true
+    }
+  },
+  "regression": {
+    "testFiles": 6,
+    "testsPassed": 74
+  },
+  "limitations": [
+    "macOS arm64 only, CU requires macOS 14.4+",
+    "Existing macOS TCC/IPC state was not reset; new machine may require OS permission approval",
+    "No GUI writes or all-app/input readiness certification",
+    "Experimental interoperability; vendor binaries not redistributed in npm"
+  ]
+}

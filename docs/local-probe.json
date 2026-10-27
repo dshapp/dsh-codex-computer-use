@@ -1,0 +1,54 @@
+{
+  "observedOn": "2026-10-27",
+  "pluginVersion": "0.1.0-experimental.1",
+  "runtime": {
+    "node": "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node",
+    "teamIdentifier": "2DC432GLL2",
+    "cli": "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
+    "modifiedVendorBinaries": false
+  },
+  "doctor": {
+    "launchMode": "signed-node",
+    "status": "read-only-call-ok",
+    "discovery": true,
+    "toolCount": 10,
+    "readOnlyCall": "ok",
+    "exitCode": 0
+  },
+  "dshBridge": {
+    "route": "DSH Cordis Loader -> adapter -> generic MCP bridge -> official signed Node permission proxy -> official CU",
+    "toolCount": 10,
+    "skillRegistered": true,
+    "isError": false,
+    "exitCode": 0,
+    "appListOmitted": true
+  },
+  "finder": {
+    "userExplicitlyApproved": true,
+    "route": "ordinary Node SDK -> official signed Node permission proxy -> official CU",
+    "app": "com.apple.finder",
+    "isError": false,
+    "contentTypes": [
+      "text",
+      "image"
+    ],
+    "images": [
+      {
+        "mimeType": "image/jpeg",
+        "bytes": 624498,
+        "jpegHeaderValid": true
+      }
+    ],
+    "axTextChars": 5733,
+    "rawContentsOmitted": true,
+    "exitCode": 0
+  },
+  "notTested": [
+    "click",
+    "type_text",
+    "drag",
+    "pointer/background guarantees",
+    "all other apps"
+  ],
+  "historicalDirectFailure": "direct-probe.json"
+}

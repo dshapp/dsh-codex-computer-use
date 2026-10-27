@@ -1,0 +1,13 @@
+node_modules/
+lib/
+*.tgz
+.DS_Store
+dist/
+artifacts/
+.env
+.env.*
+*.dmg
+*.zip
+*.tar.gz
+*.partial
+
