@@ -1,14 +1,16 @@
 # dsh-codex-computer-use
 
-DSH 的独立 Codex Computer Use 插件，**0.1.0-experimental.4**。安装时自动准备官方 CU、签名 Node、完整 CU SDK/配套模块和 CLI；**不要求用户预先安装 Codex 或 ChatGPT 桌面应用**。独立 namespace：mcp__codex_cu__*，不替换 KimiCU。
+DSH 的独立 Codex Computer Use 插件，**0.1.0-experimental.6**。安装时自动准备官方 CU、签名 Node、完整 CU SDK/配套模块和 CLI；**不要求用户预先安装 Codex 或 ChatGPT 桌面应用**。独立 namespace：mcp__codex_cu__*，不替换 KimiCU。
 
 ## 用户怎么用
 
-源码已开源于 https://github.com/dshapp/dsh-codex-computer-use ，采用 MIT（保留 KimiCU 原始归属）。尚未发布 npm；推荐安装 GitHub Release 的已构建插件包：
+源码已开源于 https://github.com/dshapp/dsh-codex-computer-use ，采用 MIT（保留 KimiCU 原始归属）。通过 GitHub Actions 发布到公共 npm，并附带 Provenance；实验版推荐指定 experimental 标签：
 
 ~~~sh
-dsh plugin --profile codex-cu-experiment add https://github.com/dshapp/dsh-codex-computer-use/releases/download/v0.1.0-experimental.4/dsh-codex-computer-use-0.1.0-experimental.4.tgz
-# 或从 GitHub 下载 .tgz 后用本地路径安装；目录/Git 包需要按 DSH 提示允许构建。
+dsh plugin --profile codex-cu-experiment add dsh-codex-computer-use@experimental
+# 若本机 npm 默认 registry 是内部镜像，先为此命令显式指定公共 registry：
+# npm_config_registry=https://registry.npmjs.org dsh plugin --profile codex-cu-experiment add dsh-codex-computer-use@experimental
+# 历史 GitHub Release 的 .4 安装包仍可下载；目录/Git 包需要按 DSH 提示允许构建。
 dsh --profile codex-cu-experiment
 ~~~
 

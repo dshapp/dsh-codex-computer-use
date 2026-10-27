@@ -101,5 +101,17 @@ jobs:
           else
             npm publish "$PACKAGE_FILE" --access public --provenance --ignore-scripts --tag "$DIST_TAG" --registry=https://registry.npmjs.org
           fi
-          npm view "dsh-codex-computer-use@$EXPECTED_VERSION" version --registry=https://registry.npmjs.org
+          visible=false
+          for attempt in {1..24}; do
+            if npm view "dsh-codex-computer-use@$EXPECTED_VERSION" version --registry=https://registry.npmjs.org; then
+              visible=true
+              break
+            fi
+            echo "Awaiting npm registry propagation ($attempt/24)..."
+            sleep 5
+          done
+          if [ "$visible" != true ]; then
+            echo "npm accepted the publish but version is not yet publicly visible; verify before rerunning." >&2
+            exit 1
+          fi
           echo "npm: https://www.npmjs.com/package/dsh-codex-computer-use/v/$EXPECTED_VERSION" >> "$GITHUB_STEP_SUMMARY"
