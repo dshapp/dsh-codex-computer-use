@@ -1,111 +1,245 @@
-# dsh-codex-computer-use
+<p align="center">
+  <img src="https://raw.githubusercontent.com/dshapp/dshapp.github.io/main/assets/img/logo-mark.png" width="96" alt="DSH">
+</p>
 
-DSH 的独立 Codex Computer Use 插件，**0.1.0-experimental.6**。安装时自动准备官方 CU、签名 Node、完整 CU SDK/配套模块和 CLI；**不要求用户预先安装 Codex 或 ChatGPT 桌面应用**。独立 namespace：mcp__codex_cu__*，不替换 KimiCU。
+<h1 align="center">DSH Codex Computer Use</h1>
 
-## 用户怎么用
+<p align="center">
+  <b>把 OpenAI 官方 Codex Computer Use 接进 DSH，让 Agent 操作任何 Mac 应用</b><br>
+  一条命令安装 · 不用预装 Codex / ChatGPT · 官方签名运行时 · 首次仅约 174 MB · 自带操作 skill
+</p>
 
-源码已开源于 https://github.com/dshapp/dsh-codex-computer-use ，采用 MIT（保留 KimiCU 原始归属）。通过 GitHub Actions 发布到公共 npm，并附带 Provenance；实验版推荐指定 experimental 标签：
+<p align="center">
+  <a href="https://www.npmjs.com/package/dsh-codex-computer-use"><img src="https://img.shields.io/npm/v/dsh-codex-computer-use/experimental?label=npm%40experimental&logo=npm&color=CB3837" alt="npm experimental"></a>
+  <img src="https://img.shields.io/badge/macOS-14.4%2B-111?logo=apple&logoColor=white" alt="macOS 14.4+">
+  <img src="https://img.shields.io/badge/Apple%20Silicon-arm64-111" alt="Apple Silicon">
+  <img src="https://img.shields.io/badge/npm-provenance-2EA44F" alt="npm provenance">
+  <img src="https://img.shields.io/badge/license-MIT-111" alt="MIT">
+</p>
+
+<p align="center">
+  <a href="#三步用起来">安装</a> ·
+  <a href="#agent-能做什么">能做什么</a> ·
+  <a href="#轻量又可信的运行时">运行时</a> ·
+  <a href="#权限与安全">权限与安全</a> ·
+  <a href="./skills/codex-computer-use/SKILL.md">操作 skill</a> ·
+  <a href="https://dshapp.github.io/products/cu/">电脑操作介绍</a>
+</p>
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/dshapp/dshapp.github.io/main/assets/img/shots/cu.jpg" alt="DSH 通过电脑操作在「提醒事项」里新建列表并逐条添加" width="900">
+</p>
+
+很多事只能在图形界面里做：内部 IM、设计工具、没有 API 的老系统、系统设置……Agent 能写代码，却点不了按钮。
+**DSH Codex Computer Use** 把 OpenAI 随 Codex / ChatGPT 桌面端发布的官方 Computer Use 引擎，作为 `mcp__codex_cu__*` 工具交给 DSH 里的 Agent——它能看懂窗口里的界面结构，在**后台**点击、输入、滚动、拖拽，不抢你的鼠标和前台窗口。
+
+> 实验版（`0.1.0-experimental`）。与 [dsh-kimi-computer-use](https://github.com/dshapp/dsh-kimi-computer-use) 使用独立的工具命名空间，可以并存，按 profile 自由切换。
+
+## 亮点
+
+- **装上就能用** —— `dsh plugin add` 一条命令；不要求你先装 Codex 或 ChatGPT 桌面端，缺的官方组件安装时自动准备，装包时跳过了也会在首次启动时补齐。
+- **能复用就不下载** —— 本机已有兼容的 ChatGPT / Codex 桌面端时，逐组件校验后直接引用，零下载；只缺哪一块才补哪一块。
+- **按字节只取需要的** —— 需要下载时，用 HTTP Range 从固定的官方 ZIP 里只取运行必需的文件：**约 174 MB，而不是 719 MB 的完整安装包**（省约 76%）。
+- **全程官方签名** —— Node、CLI、Computer Use 都来自 OpenAI 官方发布，逐文件 SHA256 + Apple 签名（Team ID `2DC432GLL2`）校验；不重签名、不修改官方二进制、不绕过系统安全机制。
+- **界面结构 + 截图双通道** —— 每次观察同时拿到辅助功能树（元素编号、可写字段、二级操作）和窗口截图，能按元素精确操作，也能按坐标点选。
+- **自带操作 skill** —— 内置参考 Codex 官方行为改写的 `codex-computer-use` skill：先观察再动手、每步复核、高风险操作先征得你同意。
+- **不碰你的账号** —— 不读取、不复制你的 Codex 登录凭据、配置或会话；需要私有运行目录时与 `~/.codex` 完全分开。
+
+## Agent 能做什么
+
+装好后直接用自然语言下指令，例如：
+
+- 「打开**提醒事项**，新建列表『下周计划』，把 周报.md 里的两项逐条加进去。」
+- 「在 **Wea** 里找到第一条未读消息，根据上下文写一段回复填进输入框，**先别发送**。」
+- 「把**系统设置**里的『勿扰模式』排程改成每天 22:00 到 8:00。」
+
+背后是这 10 个工具（参数以运行时 MCP schema 为准，详见 [docs/native-tool-schemas.json](./docs/native-tool-schemas.json)）：
+
+| 工具 | 作用 |
+| --- | --- |
+| `list_apps` | 列出正在运行和最近使用的应用 |
+| `get_app_state` | 读取应用主窗口：辅助功能树 + 截图（每轮操作前先调用） |
+| `click` | 按元素编号或截图坐标点击，支持双击、右键 |
+| `set_value` | 直接写入可编辑元素的值（输入框、搜索框等） |
+| `type_text` · `press_key` | 在当前焦点输入文字、按键或组合键（如 `super+c`、`shift+Return`） |
+| `select_text` | 选中文字，或把光标放到指定文字前后 |
+| `scroll` · `drag` | 按页滚动元素、按坐标拖拽 |
+| `perform_secondary_action` | 触发元素暴露的二级辅助功能操作 |
+
+## 三步用起来
+
+**要求**：Apple Silicon Mac，macOS 14.4 或更高；已安装 [DSH](https://github.com/deepseek-ai/deepseek-harness)（`@deepseek-ai/dsh`，Node ≥ 22.19）。
+
+1. **安装插件**（实验版请带 `@experimental` 标签）：
+
+   ~~~sh
+   dsh plugin --profile web add dsh-codex-computer-use@experimental
+   ~~~
+
+   如果 DSH 提示构建被拦截（pnpm 默认禁止安装脚本），在该 profile 的 `pnpm-workspace.yaml` 里允许本包后重跑：
+
+   ~~~yaml
+   allowBuilds:
+     dsh-codex-computer-use: true
+   ~~~
+
+   本机 npm 默认源是内部镜像时，可临时指定公共源：`npm_config_registry=https://registry.npmjs.org dsh plugin ...`。
+
+2. **启动 DSH**：`dsh --profile web`（或 `dsh web`）。几秒后 `mcp__codex_cu__*` 工具就会出现。
+
+3. **首次授权**：第一次操作时，按 macOS 提示给官方 Computer Use 授予「辅助功能」和「屏幕录制」权限。插件不会替你修改系统隐私设置。
+
+想确认一切就绪，可以跑一次只读体检（不点击、不输入）：
 
 ~~~sh
-dsh plugin --profile codex-cu-experiment add dsh-codex-computer-use@experimental
-# 若本机 npm 默认 registry 是内部镜像，先为此命令显式指定公共 registry：
-# npm_config_registry=https://registry.npmjs.org dsh plugin --profile codex-cu-experiment add dsh-codex-computer-use@experimental
-# 历史 GitHub Release 的 .4 安装包仍可下载；目录/Git 包需要按 DSH 提示允许构建。
-dsh --profile codex-cu-experiment
-~~~
-
-正常 npm 安装会运行 postinstall，自动准备运行环境。pnpm/DSH 禁止生命周期脚本或使用 --ignore-scripts 时，插件**首次启动会补装**，不需要用户另行找 Codex、@oai/sky 或 CLI。首次下载需要等待；进度与失败原因输出到安装终端/DSH 日志。
-
-**支持条件：macOS Apple Silicon（arm64），CU 要求 macOS 14.4+。** Intel Mac、Windows、Linux 目前没有已验证的自动安装来源；安装钩子不为这些平台伪装可用。DSH/开发 Node >=22.19。
-
-首次使用仍可能需要用户在 macOS 中授予官方 CU 的辅助功能、屏幕录制等系统权限。安装器不修改 TCC、不模拟用户同意；这和“不需要预装 Codex”是不同条件。也不要将当前电脑已有权限状态推广成所有新机都无需权限确认。
-
-## 自动准备哪些东西
-
-1. **先检测本地** /Applications 与 ~/Applications 的 Codex/ChatGPT 兼容 app：确认 Node、CLI、CU 来自同一已验证 cohort，验证版本、签名、标识和文件摘要。完整且有效时 **直接复用已有 Node/CLI/CU 路径，不复制 Node/CLI，不下载**。
-   - CU 还需匹配 CODEX_HOME/computer-use 的 canonical 布局；本地已有匹配 CU 则直接用。若只缺这份 canonical CU，但已有 app 包含它，仅补齐 CU 到私有 home，不远程下载，不复制用户账号文件。
-   - 完整组合不可用时，**按组件**复用：Node、CLI、CU 分别按固定的逐文件 SHA256/类型/权限和完整签名单独验证；合格的本地 Node/CLI 直接引用原路径，合格的 CU 复制到插件私有 CODEX_HOME（不占用、不覆盖 ~/.codex）。
-   - 仍缺的组件才通过 **HTTP Range 从固定官方 ZIP 只取所需文件**（见下文“轻量下载”），不再下载整个 ChatGPT 归档。原 app 更新/删除/损坏会让本地引用失效，下一次重新检测，不继续执行旧 marker。
-   - 当前兼容验证 cohort 为 26.1007.30912，不会仅因其他版本也“存在”就盲目混用。
-2. 核验维护者固定的 SHA256、归档大小、解包路径/符号链接，验证根 app 的完整签名、版本和 OpenAI Team ID。
-3. 轻量布局（minimal-v1）只包含原生 MCP 链路实际需要的三组官方文件：签名 Node 可执行文件（+LICENSE）、完整 CodexCLI.app（CU 内部要调用 codex app-server，实测去掉 CLI 会报 -10005）、完整签名 Codex Computer Use.app。不再携带 node_repl、@oai JS 模块等桌面 app 内其他内容。
-4. 在专属 CODEX_HOME/computer-use 中准备完整 Codex Computer Use.app；仅设置 SKY_CUA_SERVICE_PATH 而缺少 canonical app 不足以让官方 host 工作。
-5. 临时目录验证完成后原子发布；缓存命中重新核验必要签名/摘要，失败可重试。进程内复用下载、跨进程安装锁，避免重复下载或半成品被当成 ready。
-
-本地引用的验证标记与下载缓存位于用户 Library/Caches/dsh-codex-computer-use/runtime；缓存按版本分目录。不向 /Applications 安装整个 Codex/ChatGPT，不修改官方副本，不复制用户认证、账号、配置或会话文件。本地复用时官方 CLI 会使用所选已有 CODEX_HOME，插件不读取或复制其认证文件。专属 CODEX_HOME 不是原生 CU 全局 IPC 的完全隔离承诺。
-
-### 轻量下载
-
-第一次无本地兼容组件时，只从固定官方 ZIP 中按字节范围下载所需组件：**约 174 MB**（完整归档 719 MB，减少约 76%）。只缺 CU 时约 36 MB，只缺 CLI 时约 98 MB，只缺 Node 时约 39 MB。
-
-安全校验：固定官方 URL 与总大小；ZIP 中央目录 SHA256；每个文件压缩数据与解压内容 SHA256、类型、权限；重组后 Node / CLI / CU 的完整 Apple 签名（Team 2DC432GLL2）。任何哈希、路径、重定向或签名错误都直接失败，**不会**静默降级。只有服务器不支持 Range（返回 200/416）时，才回退到下载并校验完整官方 ZIP（719 MB，需约 6 GiB 临时空间），回退结果同样裁剪成轻量布局。已准备的版本不会每次重下载，也不会自动追随 latest。组件清单见 [runtime-components.json](./runtime-components.json)。
-
-固定来源：[官方版本 ZIP](https://persistent.oaistatic.com/codex-app-prod/ChatGPT-darwin-arm64-26.1007.30912.zip)，版本 26.1007.30912；SHA256 是本轮从官方 HTTPS 下载、验证官方签名后维护者固定的摘要，**不是宣称 OpenAI 发布了此 SHA 清单**。见 [来源清单](./runtime-source.json)。选用与已验证 CU/CLI 匹配的版本，避免从多个 latest 来源拼出不兼容组合。
-
-本包只分发安装器、bridge 和 skill。GitHub Release 可托管明确有开放许可的组件；CU、node_repl 和未找到自身再分发许可的 @oai 专用模块 **未公开镜像，继续从官方来源获取**。详见 [依赖分发策略](./docs/distribution.md)；官方下载、本机提取不代表供应商对第三方集成的授权或长期支持保证。保留官方版权、许可证和签名；本插件 MIT 许可不延伸到下载的专有组件。
-
-## 诊断、离线包与重试
-
-~~~sh
-# 普通使用不需要先跑这些；遇到问题可以重试/复查。
-dsh-codex-cu-setup
-# 仅检查准备标记，不下载；不等价真实 GUI ready。
-dsh-codex-cu-setup --check
-# 重新验证/准备同一固定版本，发布前不影响旧缓存。
-dsh-codex-cu-setup --force
-# 用完全相同的官方 ZIP 离线准备；仍校验 pin 和签名。
-dsh-codex-cu-setup --archive /absolute/path/official-pinned.zip --skip-local
-# 真实只读诊断：自动准备 + initialize/listTools/list_apps，不点击/输入。
 dsh-codex-cu-doctor
 ~~~
 
-setup 的 --runtime-dir 可指定绝对缓存目录；--source-app 仅接受正确版本、签名的官方 app。环境 DSH_CODEX_CU_ARCHIVE 可提供精确 ZIP，DSH_CODEX_CU_SKIP_LOCAL=1 强制不依赖已安装 app。
+## 轻量又可信的运行时
 
-CI/不希望安装时下载可设置 DSH_CODEX_CU_SKIP_SETUP=1；这仅跳过 npm hook，默认插件首次使用仍补装。若连首次使用也禁止下载，设置 autoSetup=false 并预先准备缓存或提供全部显式路径。
+~~~mermaid
+flowchart LR
+  agent(["dsh 里的 Agent"]) -- "mcp__codex_cu__*" --> bridge["dsh-mcp-client<br/>（通用 MCP 桥）"]
+  bridge --> node["OpenAI 签名 Node<br/>+ 权限代理"]
+  node --> cu["官方 Computer Use<br/>client / service"]
+  cu -- "辅助功能 + 截图" --> apps["你的 Mac 应用"]
+  style node fill:#0A84FF,stroke:#0A84FF,color:#fff
+~~~
 
-## 配置与访问策略
+**为什么要签名 Node？** 用普通 Node 直接启动官方 Computer Use，会被 `-10000 Sender process is not authenticated` 拒绝。本插件用 OpenAI 签名的 Node 运行一个很小的 MCP 权限代理，再拉起官方 client；同时提供官方 CLI 路径（缺少它会报 `-10005`），并实现 `elicitation/create` 回调，使应用访问授权能在 DSH 中正常走完。
 
-默认 config={} 即可：自动准备、独立运行时、permissionMode=allow-all。高级覆盖稳定 row id：
+**运行时从哪来**，按以下顺序，能省则省：
+
+| 顺序 | 来源 | 下载量 |
+| --- | --- | --- |
+| 1 | 本机 `/Applications`、`~/Applications` 里已有的兼容 ChatGPT / Codex 桌面端，三个组件一起校验通过 | 0 |
+| 2 | 按组件复用：Node、CLI、Computer Use 分别校验，合格的直接引用 | 0 |
+| 3 | 只缺的组件用 HTTP Range 从官方 ZIP 精确取出 | 只缺 CU 约 36 MB · 只缺 CLI 约 98 MB · 只缺 Node 约 39 MB · 全缺约 174 MB |
+| 4 | 服务器不支持 Range（返回 200 / 416）时，才下载并校验完整官方 ZIP，再裁剪成同样的轻量布局 | 719 MB |
+
+**校验什么**：固定的官方 URL 与文件大小；ZIP 中央目录 SHA256；每个文件压缩数据与解压内容的 SHA256、类型、权限；组装后 Node / CLI / Computer Use 的完整 Apple 签名。任何一项不符直接失败，**绝不静默降级**。
+
+- 当前兼容版本固定为 **26.1007.30912**（[官方 ZIP](https://persistent.oaistatic.com/codex-app-prod/ChatGPT-darwin-arm64-26.1007.30912.zip)），不会自动追随 latest，也不会把不同版本的组件拼在一起。清单见 [runtime-source.json](./runtime-source.json) 与 [runtime-components.json](./runtime-components.json)。这些 SHA256 是维护者从官方 HTTPS 下载、验证官方签名后固定的，**不代表 OpenAI 发布过这份清单**。
+- 准备好的运行时缓存在 `~/Library/Caches/dsh-codex-computer-use/runtime`，按版本分目录；临时目录验证通过后才原子发布，有跨进程安装锁，不会把半成品当成就绪。
+- 本机原有的 app 被更新、删除或损坏时，引用自动失效，下次重新检测。
+- 本包只分发安装器、桥接代码和 skill；Computer Use 等官方专有组件**不做镜像**，始终从官方来源获取。详见 [依赖分发策略](./docs/distribution.md)。
+
+## 权限与安全
+
+默认 `config: {}` 即可：自动准备运行时，`permissionMode: allow-all`——自动接受已识别的官方「应用访问」请求，不逐个应用弹窗确认。
+
+| `permissionMode` | 行为 |
+| --- | --- |
+| `allow-all`（默认） | 自动允许访问应用 |
+| `prompt` | 每个应用首次访问时请你确认 |
+| `deny` | 只允许 `allowedApps` 中精确列出的应用显示名称 |
+
+任何模式下，账号、token、URL 跳转、未知表单和已取消的请求都会被拒绝。
+
+请注意：放开应用访问，意味着 Agent 能读取、操作这些应用里的内容，只在你信任当前任务时使用。它**不等于**发送消息、删除、购买、发布等业务授权——内置 skill 会要求 Agent 在这些不可逆操作前先征得你同意。切回 `prompt` / `deny` 并重启即可收紧。
+
+<details>
+<summary>高级配置</summary>
+
+在 profile 里覆盖稳定的 row id：
 
 ~~~yaml
 - id: computer-use-codex-cu
   config:
-    autoSetup: true
+    autoSetup: true                 # false：首次使用也不自动下载
     runtimeDir: /absolute/path/private-runtime-cache
-    permissionMode: allow-all
+    permissionMode: allow-all       # allow-all | prompt | deny
+    allowedApps: []                 # deny 模式下的白名单（应用显示名称）
     toolCallTimeoutMs: 60000
 ~~~
 
-默认自动接受已识别的官方“应用访问 + 空表单”请求，不弹逐应用确认，不需要名单。prompt 可恢复逐应用确认；deny 只允许 allowedApps 的精确显示名称。账号、token、URL flow、未知表单/请求和已取消的请求仍拒绝。
+- `mode: direct` 保留直连诊断模式；同时提供 `appPath` / `nodePath` / `cliPath`（均须为绝对路径）会跳过自动准备，但插件不会因此宣称它们是官方签名。
+- 显式 `codexHome` 优先；自定义目录需自行满足 `computer-use` 的标准布局。
+- 环境变量：`DSH_CODEX_CU_SKIP_SETUP=1` 跳过 npm 安装钩子（首次使用仍会补装）；`DSH_CODEX_CU_ARCHIVE` 指定本地官方 ZIP；`DSH_CODEX_CU_SKIP_LOCAL=1` 不复用本机已装的 app。
 
-应用访问放开意味着 agent 可能读取/操作敏感应用；只在信任当前 agent/任务环境时使用。它不是发送消息、删除、购买或发布的业务授权，agent 仍须按风险确认；也不授予缺失的 macOS 权限。切回 prompt/deny 并重启可恢复限制；allow-all 下清空名单不能限制应用。
+</details>
 
-兼容专家手动模式：mode=direct 保留直连诊断；提供全部 appPath/nodePath/cliPath 会跳过自举。这些 override 必须绝对路径/可执行，但任意 override 不会被自动宣称为官方签名。显式 codexHome 优先；自定义 home 应自行满足其 computer-use canonical app 布局。
+<details>
+<summary>诊断、离线安装与重试</summary>
 
-## 为什么不直接用普通 Node
+平时不需要手动运行；遇到问题时可用：
 
-普通 Node 直接启动官方 CU 会被 -10000 Sender process is not authenticated 拒绝。本包由 OpenAI 签名 Node 执行 MCP proxy，再启动官方 CU；同时显式提供官方 CLI/服务路径，解决随后可能出现的 -10005。proxy 实现 elicitation/create，避免 get_app_state 因缺应用授权回调返回 Method not found。
+~~~sh
+dsh-codex-cu-setup                 # 准备 / 补齐运行时
+dsh-codex-cu-setup --check         # 只检查就绪标记，不下载
+dsh-codex-cu-setup --force         # 重新校验并准备同一固定版本（完成前不影响旧缓存）
+dsh-codex-cu-setup --archive /absolute/path/official-pinned.zip --skip-local   # 用同一官方 ZIP 离线准备
+dsh-codex-cu-doctor                # 真实只读体检：initialize / listTools / list_apps
+~~~
 
-启动链：DSH → 通用 MCP bridge → **已验证的本地官方签名 Node（或缺失时准备的管理缓存 Node）** → MCP permission proxy → 官方 CU client/service。没有重新签名、修改官方 binaries、伪造 token 或关闭系统安全机制。
+`--runtime-dir` 指定绝对缓存目录；`--source-app` 只接受版本和签名都正确的官方 app。
 
-工具参数以 live MCP schema 为准：Codex 使用字符串 element_index、单数 key、direction/pages，不能照搬 KimiCU index/keys/pid/snapshot_id/clear/submit 等参数。见 [操作 skill](./skills/codex-computer-use/SKILL.md)。
+</details>
 
-## 开发验证与回退
+## 卸载与回退
+
+~~~sh
+dsh plugin --profile web remove dsh-codex-computer-use
+~~~
+
+卸载不会终止共享的 Computer Use 服务，也不会删除原有的 Codex / ChatGPT 安装或任何账号文件。确认没有客户端在使用后，可手动清理 `~/Library/Caches/dsh-codex-computer-use`。想换回 KimiCU，切换到装有 [dsh-kimi-computer-use](https://github.com/dshapp/dsh-kimi-computer-use) 的 profile 即可。
+
+## 开发
 
 ~~~sh
 DSH_CODEX_CU_SKIP_SETUP=1 npm install
-npm run check
-npm run test:pack
-npm run setup
-npm run doctor
+npm run check        # 构建 + 单元测试
+npm run test:pack    # 校验发布包内容
+npm run setup        # 在本机准备运行时
+npm run doctor       # 真实只读体检
 ~~~
 
-[验证记录](./docs/validation.md)区分单测、生产安装钩子和真实只读验收；[调研记录](./docs/local-investigation.md)与[历史直连基线](./docs/direct-probe.json)保留问题定位过程。只读成功不等于全部点击/输入/拖拽或后台光标行为已认证。
+| 路径 | 内容 |
+| --- | --- |
+| `src/launcher.ts` | 签名 Node 中运行的 MCP 权限代理 |
+| `src/bootstrap.ts` · `src/minimal-bootstrap.ts` | 本地复用与轻量运行时准备 |
+| `src/range-runtime.ts` | HTTP Range 精确下载与逐文件校验 |
+| `src/index.ts` | DSH 插件入口（`computer-use-codex-cu`） |
+| `skills/codex-computer-use/` | 内置操作 skill |
+| `docs/` | [验证记录](./docs/validation.md)、[skill 分析](./docs/skill-analysis.md)、[调研记录](./docs/local-investigation.md)、[npm 发布](./docs/npm-publishing.md) |
 
-停用/卸载本插件或切回 KimiCU profile 即可回退。安装器不终止共享 CU service，不自动删除正在使用的旧版 bundle。缓存可在确认没有相关客户端/服务使用它后手动清理，不删除任何原 Codex 安装或用户账号文件。
+**发布**：通过 GitHub Actions 发布到 npm，使用 Trusted Publishing（OIDC）并附带 Provenance，不保存长期 npm token。
 
-~~~sh
-dsh plugin --profile codex-cu-experiment remove dsh-codex-computer-use
+本插件代码以 [MIT](./LICENSE) 许可发布（保留 KimiCU 原始归属）。MIT 不延伸到运行时下载的 OpenAI 专有组件，这些组件保留其官方版权、许可与签名。本项目是第三方互操作插件，不代表 OpenAI 或 DeepSeek 的背书、合作或长期支持承诺。
+
+<!-- dsh-family:start -->
+## DSH App 家族
+
+**DSH App** 是为 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（`dsh`）打造的一组客户端与插件。它们都接入你电脑上**同一个** dsh——会话、模型与插件处处互通，按需组合即可。下载与文档见 **[dshapp.github.io](https://dshapp.github.io/)**。
+
+~~~mermaid
+flowchart LR
+  subgraph pc["你的电脑"]
+    mac["macOS App"] --> dsh(["dsh"])
+    cc["dsh-chrome-control"] --- dsh
+    mb["dsh-mobile-bridge"] --- dsh
+    cu["dsh-kimi-computer-use"] --- dsh
+    codex["dsh-codex-computer-use"] --- dsh
+    cs["dsh-claude-subscription"] --- dsh
+    ext["Chrome 扩展"] <--> cc
+  end
+  android["Android App"] --> proxy["dsh-proxy"]
+  mini["微信小程序"] --> proxy
+  proxy <--> mb
+  style codex fill:#0A84FF,stroke:#0A84FF,color:#fff
 ~~~
 
-[LICENSE](./LICENSE)（仅本插件代码）。
+| | 项目 | 做什么 | 链接 |
+| --- | --- | --- | --- |
+| 客户端 | **macOS App**<br>`dsh-macapp` | 原生 SwiftUI 客户端，托管本机 dsh，一站式开启各个扩展 | [介绍](https://dshapp.github.io/products/macos/) · [源码](https://github.com/dshapp/dsh-macapp) |
+|  | **Android App**<br>`dsh-androidapp` | 口袋里的 DSH：审批、提问、通知，端到端加密连回电脑 | [介绍](https://dshapp.github.io/products/android/) · [源码](https://github.com/dshapp/dsh-androidapp) |
+|  | **微信小程序 DSH Remote**<br>`dsh-miniapp` | 免安装，iPhone / Android 的微信里扫码接管 DSH | [介绍](https://dshapp.github.io/products/miniapp/) · [源码](https://github.com/dshapp/dsh-miniapp) |
+|  | **Chrome 扩展**<br>`dsh-chrome-extension` | 浏览器侧栏里的 DSH 客户端，也是浏览器控制的执行端 | [介绍](https://dshapp.github.io/products/chrome/) · [源码](https://github.com/dshapp/dsh-chrome-extension) |
+| dsh 插件 | **浏览器控制**<br>`dsh-chrome-control` | 把你已登录的 Chrome 作为 `mcp__chrome__*` 工具交给 Agent | [介绍](https://dshapp.github.io/products/chrome/) · [源码](https://github.com/dshapp/dsh-chrome-control) |
+|  | **移动端桥接**<br>`dsh-mobile-bridge` | 经 Noise 加密隧道把 dsh 交给已配对的手机，不开端口 | [介绍](https://dshapp.github.io/products/android/) · [源码](https://github.com/dshapp/dsh-mobile-bridge) |
+|  | **电脑操作（Kimi）**<br>`dsh-kimi-computer-use` | 让 Agent 在后台操作没有 API 的 Mac 应用 | [介绍](https://dshapp.github.io/products/cu/) · [源码](https://github.com/dshapp/dsh-kimi-computer-use) |
+|  | **电脑操作（Codex）** ← 你在这里<br>`dsh-codex-computer-use` | 用 OpenAI 官方 Computer Use 操作 Mac 应用，自动准备官方签名运行时 | [介绍](https://dshapp.github.io/products/cu/) |
+|  | **Claude 订阅**<br>`dsh-claude-subscription` | 用 Claude Code 订阅在 DSH 里跑 Claude 模型，不用另买 API Key | [源码](https://github.com/dshapp/dsh-claude-subscription) |
+| 基础设施 | **中转服务**<br>`dsh-proxy` | 手机远程唯一的公网组件：单端口、只转发密文、无状态 | [介绍](https://dshapp.github.io/docs/crypto/) · [源码](https://github.com/dshapp/dsh-proxy) |
+|  | **产品站**<br>`dshapp.github.io` | 下载、文档与更新日志 | [介绍](https://dshapp.github.io/) · [源码](https://github.com/dshapp/dshapp.github.io) |
+<!-- dsh-family:end -->
